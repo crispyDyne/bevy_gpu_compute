@@ -14,7 +14,7 @@ use bytemuck::{Pod, Zeroable};
 use std::borrow::Cow;
 
 /// This example uses a shader source file from the assets subdirectory
-const SHADER_ASSET_PATH: &str = "compute.wgsl";
+const SHADER_COMPUTE_PATH: &str = "compute.wgsl";
 
 const DISPLAY_FACTOR: u32 = 4;
 const SIZE: (u32, u32) = (1280 / DISPLAY_FACTOR, 720 / DISPLAY_FACTOR);
@@ -202,7 +202,7 @@ impl FromWorld for ParticleComputePipeline {
             ],
         );
 
-        let shader = world.load_asset(SHADER_ASSET_PATH);
+        let shader = world.load_asset(SHADER_COMPUTE_PATH);
         let pipeline_cache = world.resource::<PipelineCache>();
         let init_pipeline = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
             label: None,
@@ -261,7 +261,7 @@ impl render_graph::Node for ParticleNode {
                         self.state = ParticleState::Init;
                     }
                     CachedPipelineState::Err(err) => {
-                        panic!("Initializing assets/{SHADER_ASSET_PATH}:\n{err}")
+                        panic!("Initializing assets/{SHADER_COMPUTE_PATH}:\n{err}")
                     }
                     _ => {}
                 }
