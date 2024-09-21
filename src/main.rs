@@ -57,6 +57,17 @@ pub struct ParticleBuffer {
     pub buffer: Buffer,
 }
 
+#[repr(C)]
+#[derive(Default, ShaderType, Clone, Copy, Zeroable, Pod)]
+pub struct ParticleConfig {
+    pub particle_count: u32,
+}
+
+#[derive(Resource, Clone, ExtractResource)]
+struct ParticleConfigBuffer {
+    buffer: Buffer,
+}
+
 pub fn setup(mut commands: Commands, render_device: Res<RenderDevice>) {
     commands.spawn(Camera3dBundle {
         transform: Transform::from_translation(Vec3::new(0.0, 0.0, 100.0)),
@@ -82,6 +93,18 @@ pub fn setup(mut commands: Commands, render_device: Res<RenderDevice>) {
     });
 
     commands.insert_resource(ParticleBuffer { buffer });
+
+    // Create the particle config buffer
+    let particle_config = ParticleConfig { particle_count };
+    let config_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+        label: Some("Particle Config Buffer"),
+        contents: bytemuck::cast_slice(&[particle_config]),
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+    });
+
+    commands.insert_resource(ParticleConfigBuffer {
+        buffer: config_buffer,
+    });
 }
 
 struct ParticleComputePlugin;
@@ -94,6 +117,7 @@ impl Plugin for ParticleComputePlugin {
         // Extract the game of life image resource from the main world into the render world
         // for operation on by the compute shader and display on the sprite.
         app.add_plugins(ExtractResourcePlugin::<ParticleBuffer>::default());
+        app.add_plugins(ExtractResourcePlugin::<ParticleConfigBuffer>::default());
         let render_app = app.sub_app_mut(RenderApp);
         // This seems wrong. The prepare_bind_group should only be called once, but it is called
         // every frame.
@@ -120,15 +144,22 @@ fn prepare_bind_group(
     mut commands: Commands,
     pipeline: Res<ParticleComputePipeline>,
     particle_buffer: Res<ParticleBuffer>, // Access the ParticleBuffer resource
+    config_buffer: Res<ParticleConfigBuffer>,
     render_device: Res<RenderDevice>,
 ) {
     let particle_bind_group = render_device.create_bind_group(
         "Particle Bind Group",
         &pipeline.particle_bind_group_layout,
-        &[BindGroupEntry {
-            binding: 0,
-            resource: particle_buffer.buffer.as_entire_binding(),
-        }],
+        &[
+            BindGroupEntry {
+                binding: 0,
+                resource: particle_buffer.buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 1,
+                resource: config_buffer.buffer.as_entire_binding(),
+            },
+        ],
     );
 
     println!("Pipeline - prepare_bind_group");
@@ -147,16 +178,28 @@ impl FromWorld for ParticleComputePipeline {
         let render_device = world.resource::<RenderDevice>();
         let particle_bind_group_layout = render_device.create_bind_group_layout(
             "Particle Bind Group Layout",
-            &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::COMPUTE,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: bevy::render::render_resource::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: Some(ParticleConfig::min_size()),
+                    },
+                    count: None,
+                },
+            ],
         );
 
         let shader = world.load_asset(SHADER_ASSET_PATH);
