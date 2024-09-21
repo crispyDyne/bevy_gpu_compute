@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.14.2"
+bytemuck = "1.18.0"
