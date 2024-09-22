@@ -19,9 +19,9 @@ use std::borrow::Cow;
 const SHADER_COMPUTE_PATH: &str = "compute.wgsl";
 const SHADER_RENDER_PATH: &str = "render.wgsl";
 
-const DEPTH: u32 = 50;
-const WIDTH: u32 = 50;
-const WORKGROUP_SIZE: u32 = 64;
+const DEPTH: u32 = 30;
+const WIDTH: u32 = 30;
+const WORKGROUP_SIZE: u32 = 32;
 
 fn main() {
     App::new()
@@ -91,7 +91,8 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(-5.0, -1.0, 2.0).looking_at(Vec3::new(0., 0., 0.0), Vec3::Z),
+        transform: Transform::from_xyz(-6.0, -1.0, 1.0)
+            .looking_at(Vec3::new(0.0, 0.0, 1.5), Vec3::Z),
         ..Default::default()
     });
 
