@@ -4,9 +4,11 @@ use bevy::{
     prelude::*,
     render::{
         extract_resource::{ExtractResource, ExtractResourcePlugin},
+        render_asset::{RenderAssetUsages, RenderAssets},
         render_graph::{self, RenderGraph, RenderLabel},
         render_resource::*,
         renderer::{RenderContext, RenderDevice},
+        storage::{GpuShaderStorageBuffer, ShaderStorageBuffer},
         Render, RenderApp, RenderSet,
     },
 };
@@ -15,6 +17,7 @@ use std::borrow::Cow;
 
 /// This example uses a shader source file from the assets subdirectory
 const SHADER_COMPUTE_PATH: &str = "compute.wgsl";
+const SHADER_ASSET_PATH: &str = "render.wgsl";
 
 const DISPLAY_FACTOR: u32 = 4;
 const SIZE: (u32, u32) = (1280 / DISPLAY_FACTOR, 720 / DISPLAY_FACTOR);
@@ -24,21 +27,21 @@ fn main() {
     App::new()
         .insert_resource(ClearColor(Color::BLACK))
         .add_plugins((
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        resolution: (
-                            (SIZE.0 * DISPLAY_FACTOR) as f32,
-                            (SIZE.1 * DISPLAY_FACTOR) as f32,
-                        )
-                            .into(),
-                        // uncomment for unthrottled FPS
-                        // present_mode: bevy::window::PresentMode::AutoNoVsync,
-                        ..default()
-                    }),
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: Some(Window {
+                    resolution: (
+                        (SIZE.0 * DISPLAY_FACTOR) as f32,
+                        (SIZE.1 * DISPLAY_FACTOR) as f32,
+                    )
+                        .into(),
+                    // uncomment for unthrottled FPS
+                    // present_mode: bevy::window::PresentMode::AutoNoVsync,
                     ..default()
-                })
-                .set(ImagePlugin::default_nearest()),
+                }),
+                ..default()
+            }),
+            // .set(ImagePlugin::default_nearest()),
+            MaterialPlugin::<ComputeMaterial>::default(),
             ParticleComputePlugin,
         ))
         .add_systems(Startup, setup)
@@ -46,15 +49,10 @@ fn main() {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
+#[derive(Clone, Copy, Pod, Zeroable, ShaderType)]
 struct Particle {
     position: Vec3,
     velocity: Vec3,
-}
-
-#[derive(Resource, Clone, ExtractResource)]
-pub struct ParticleBuffer {
-    pub buffer: Buffer,
 }
 
 #[repr(C)]
@@ -68,7 +66,32 @@ struct ParticleConfigBuffer {
     buffer: Buffer,
 }
 
-pub fn setup(mut commands: Commands, render_device: Res<RenderDevice>) {
+#[derive(Resource, Clone, ExtractResource)]
+struct ComputeMaterialHandle(Handle<ComputeMaterial>);
+
+// This struct defines the data that will be passed to your shader
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+struct ComputeMaterial {
+    #[storage(0, read_only)]
+    compute: Handle<ShaderStorageBuffer>,
+}
+
+impl Material for ComputeMaterial {
+    fn vertex_shader() -> ShaderRef {
+        SHADER_ASSET_PATH.into()
+    }
+}
+#[derive(Resource, Clone, ExtractResource)]
+struct StorageBufferID {
+    storage_buffer_id: AssetId<ShaderStorageBuffer>,
+}
+
+fn setup(
+    mut commands: Commands,
+    render_device: Res<RenderDevice>,
+    mut buffers: ResMut<Assets<ShaderStorageBuffer>>,
+    mut materials: ResMut<Assets<ComputeMaterial>>,
+) {
     commands.spawn(Camera3dBundle {
         transform: Transform::from_translation(Vec3::new(0.0, 0.0, 100.0)),
         ..Default::default()
@@ -86,13 +109,21 @@ pub fn setup(mut commands: Commands, render_device: Res<RenderDevice>) {
     ];
 
     // Create the buffer
-    let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
-        label: Some("Particle Buffer"),
-        contents: bytemuck::cast_slice(&particles),
-        usage: BufferUsages::STORAGE | BufferUsages::VERTEX | BufferUsages::COPY_DST,
-    });
+    let mut storage_buffer = ShaderStorageBuffer::from(particles.clone());
+    storage_buffer.asset_usage = RenderAssetUsages::RENDER_WORLD;
+    storage_buffer.buffer_description.usage =
+        BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::MAP_READ;
 
-    commands.insert_resource(ParticleBuffer { buffer });
+    let storage_buffer_handle = buffers.add(ShaderStorageBuffer::from(particles.clone()));
+    let compute_material = ComputeMaterial {
+        compute: storage_buffer_handle.clone(),
+    };
+    let material_handle = materials.add(compute_material);
+    commands.insert_resource(ComputeMaterialHandle(material_handle.clone()));
+
+    let storage_buffer_id = storage_buffer_handle.id();
+    println!("Storage Buffer ID: {:?}", storage_buffer_id);
+    commands.insert_resource(StorageBufferID { storage_buffer_id });
 
     // Create the particle config buffer
     let particle_config = ParticleConfig { particle_count };
@@ -116,15 +147,13 @@ impl Plugin for ParticleComputePlugin {
     fn build(&self, app: &mut App) {
         // Extract the game of life image resource from the main world into the render world
         // for operation on by the compute shader and display on the sprite.
-        app.add_plugins(ExtractResourcePlugin::<ParticleBuffer>::default());
         app.add_plugins(ExtractResourcePlugin::<ParticleConfigBuffer>::default());
+        app.add_plugins(ExtractResourcePlugin::<StorageBufferID>::default());
+        app.add_plugins(ExtractResourcePlugin::<ComputeMaterialHandle>::default());
         let render_app = app.sub_app_mut(RenderApp);
         // This seems wrong. The prepare_bind_group should only be called once, but it is called
         // every frame.
-        render_app.add_systems(
-            Render,
-            prepare_bind_group.in_set(RenderSet::PrepareBindGroups),
-        );
+        render_app.add_systems(Render, prepare_bind_group.in_set(RenderSet::Prepare));
 
         let mut render_graph = render_app.world_mut().resource_mut::<RenderGraph>();
         render_graph.add_node(ParticleLabel, ParticleNode::default());
@@ -143,17 +172,29 @@ struct ParticleBindGroups(BindGroup);
 fn prepare_bind_group(
     mut commands: Commands,
     pipeline: Res<ParticleComputePipeline>,
-    particle_buffer: Res<ParticleBuffer>, // Access the ParticleBuffer resource
     config_buffer: Res<ParticleConfigBuffer>,
     render_device: Res<RenderDevice>,
+    storage_buffer_id: Res<StorageBufferID>,
+    render_assets: Res<RenderAssets<GpuShaderStorageBuffer>>,
+    // material_handle: Res<ComputeMaterialHandle>,
+    // materials: ResMut<Assets<ComputeMaterial>>,
+    // mut buffers: ResMut<Assets<ShaderStorageBuffer>>,
 ) {
+    // let material = materials.get_mut(&material_handle.0).unwrap();
+    // let buffer = buffers.get_mut(&material.compute).unwrap();
+
+    println!("Pipeline - prepare_bind_group");
+    let storage_buffer = render_assets
+        .get(storage_buffer_id.storage_buffer_id.clone())
+        .unwrap();
+
     let particle_bind_group = render_device.create_bind_group(
         "Particle Bind Group",
         &pipeline.particle_bind_group_layout,
         &[
             BindGroupEntry {
                 binding: 0,
-                resource: particle_buffer.buffer.as_entire_binding(),
+                resource: storage_buffer.buffer.as_entire_binding(),
             },
             BindGroupEntry {
                 binding: 1,
@@ -292,7 +333,6 @@ impl render_graph::Node for ParticleNode {
         render_context: &mut RenderContext,
         world: &World,
     ) -> Result<(), render_graph::NodeRunError> {
-        let bind_group = &world.resource::<ParticleBindGroups>().0;
         let pipeline_cache = world.resource::<PipelineCache>();
         let pipeline = world.resource::<ParticleComputePipeline>();
 
@@ -306,6 +346,7 @@ impl render_graph::Node for ParticleNode {
                 println!("Pipeline - run - Loading");
             }
             ParticleState::Init => {
+                let bind_group = &world.resource::<ParticleBindGroups>().0;
                 println!("Pipeline - run - Init");
                 let init_pipeline = pipeline_cache
                     .get_compute_pipeline(pipeline.init_pipeline)
@@ -315,6 +356,7 @@ impl render_graph::Node for ParticleNode {
                 pass.dispatch_workgroups(SIZE.0 / WORKGROUP_SIZE, SIZE.1 / WORKGROUP_SIZE, 1);
             }
             ParticleState::Update(index) => {
+                let bind_group = &world.resource::<ParticleBindGroups>().0;
                 println!("Pipeline - run - Update");
                 let update_pipeline = pipeline_cache
                     .get_compute_pipeline(pipeline.update_pipeline)
