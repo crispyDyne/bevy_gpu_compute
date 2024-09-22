@@ -19,8 +19,8 @@ use std::borrow::Cow;
 const SHADER_COMPUTE_PATH: &str = "compute.wgsl";
 const SHADER_RENDER_PATH: &str = "render.wgsl";
 
-const DEPTH: u32 = 50;
-const WIDTH: u32 = 50;
+const DEPTH: u32 = 100;
+const WIDTH: u32 = 100;
 const WORKGROUP_SIZE: u32 = 32;
 
 fn main() {
@@ -164,12 +164,12 @@ fn setup(
     });
 
     // create meshes for particles
-    let mesh = Sphere::new(2.0 / (particle_count as f32).sqrt());
-    for particle in particles {
+    let mesh = Sphere::new(2.0 / (particle_count as f32).sqrt()).mesh();
+    let mesh_handle = meshes.add(mesh.clone());
+    for _ in 0..particle_count {
         commands.spawn(MaterialMeshBundle {
-            mesh: meshes.add(mesh.clone()),
+            mesh: mesh_handle.clone(),
             material: material_handle.clone(),
-            transform: Transform::from_translation(particle.position),
             ..Default::default()
         });
     }
