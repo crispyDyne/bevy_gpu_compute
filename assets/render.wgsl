@@ -36,7 +36,7 @@ struct Particle {
     velocity: vec3<f32>,
 }
 
-@group(2) @binding(100) var<storage, read> particles: array<Particle, 1000>;
+@group(2) @binding(100) var<storage, read> particles: array<Particle>;
 
 
 @vertex

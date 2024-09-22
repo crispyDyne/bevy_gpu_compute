@@ -20,21 +20,12 @@ use std::borrow::Cow;
 const SHADER_COMPUTE_PATH: &str = "compute.wgsl";
 const SHADER_ASSET_PATH: &str = "render.wgsl";
 
-const DISPLAY_FACTOR: u32 = 4;
-const SIZE: (u32, u32) = (1280 / DISPLAY_FACTOR, 720 / DISPLAY_FACTOR);
-const WORKGROUP_SIZE: u32 = 8;
-
 fn main() {
     App::new()
         .insert_resource(ClearColor(Color::BLACK))
         .add_plugins((
             DefaultPlugins.set(WindowPlugin {
                 primary_window: Some(Window {
-                    resolution: (
-                        (SIZE.0 * DISPLAY_FACTOR) as f32,
-                        (SIZE.1 * DISPLAY_FACTOR) as f32,
-                    )
-                        .into(),
                     // uncomment for unthrottled FPS
                     // present_mode: bevy::window::PresentMode::AutoNoVsync,
                     ..default()
@@ -109,16 +100,25 @@ fn setup(
         ..Default::default()
     },));
 
-    let particle_count = 1000;
+    let array_width = 30;
+    let array_depth = 30;
+    let particle_count = array_width * array_depth;
 
-    // Initialize particle data
-    let particles = vec![
-        Particle {
-            position: Vec3::ZERO,
-            velocity: Vec3::ZERO,
-        };
-        particle_count as usize
-    ];
+    let mut particles = vec![];
+
+    for x in 0..array_width {
+        for y in 0..array_depth {
+            let position = Vec3::new(
+                (x as f32 - array_width as f32 / 2.0) * 0.1,
+                (y as f32 - array_depth as f32 / 2.0) * 0.1,
+                0.0,
+            );
+            particles.push(Particle {
+                position,
+                velocity: Vec3::new(0., 0., ((x * y) as f32) / particle_count as f32),
+            });
+        }
+    }
 
     let mut storage_buffer = ShaderStorageBuffer::from(particles.clone());
     storage_buffer.buffer_description.usage = BufferUsages::STORAGE | BufferUsages::COPY_DST;
@@ -154,7 +154,7 @@ fn setup(
     });
 
     // create meshes for particles
-    let mesh = Sphere::new(1.0);
+    let mesh = Sphere::new(0.1);
     for particle in particles {
         commands.spawn(MaterialMeshBundle {
             mesh: meshes.add(mesh.clone()),
@@ -381,7 +381,7 @@ impl render_graph::Node for ParticleNode {
                     .unwrap();
                 pass.set_bind_group(0, &bind_group, &[]);
                 pass.set_pipeline(init_pipeline);
-                pass.dispatch_workgroups(SIZE.0 / WORKGROUP_SIZE, SIZE.1 / WORKGROUP_SIZE, 1);
+                pass.dispatch_workgroups(64, 1, 1);
             }
             ParticleState::Update(index) => {
                 let bind_group = &world.resource::<ParticleBindGroups>().0;
@@ -391,7 +391,7 @@ impl render_graph::Node for ParticleNode {
                     .unwrap();
                 pass.set_bind_group(0, &bind_group, &[]);
                 pass.set_pipeline(update_pipeline);
-                pass.dispatch_workgroups(SIZE.0 / WORKGROUP_SIZE, SIZE.1 / WORKGROUP_SIZE, 1);
+                pass.dispatch_workgroups(64, 1, 1);
             }
         }
 
