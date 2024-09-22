@@ -16,9 +16,12 @@ use bevy::{
 use bytemuck::{Pod, Zeroable};
 use std::borrow::Cow;
 
-/// This example uses a shader source file from the assets subdirectory
 const SHADER_COMPUTE_PATH: &str = "compute.wgsl";
 const SHADER_ASSET_PATH: &str = "render.wgsl";
+
+const DEPTH: u32 = 50;
+const WIDTH: u32 = 50;
+const WORKGROUP_SIZE: u32 = 64;
 
 fn main() {
     App::new()
@@ -86,13 +89,12 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(-10.0, -1.0, 1.0)
-            .looking_at(Vec3::new(0., 0., 0.5), Vec3::Z),
+        transform: Transform::from_xyz(-5.0, -1.0, 2.0).looking_at(Vec3::new(0., 0., 0.0), Vec3::Z),
         ..Default::default()
     });
 
     commands.spawn((DirectionalLightBundle {
-        transform: Transform::from_xyz(-10.0, 5.0, 2.0).looking_at(Vec3::ZERO, Vec3::Z),
+        transform: Transform::from_xyz(-5.0, 5.0, 2.0).looking_at(Vec3::ZERO, Vec3::Z),
         directional_light: DirectionalLight {
             illuminance: 10000.0,
             ..Default::default()
@@ -100,17 +102,17 @@ fn setup(
         ..Default::default()
     },));
 
-    let array_width = 30;
-    let array_depth = 30;
-    let particle_count = array_width * array_depth;
+    let particle_count = WIDTH * DEPTH;
 
     let mut particles = vec![];
 
-    for x in 0..array_width {
-        for y in 0..array_depth {
+    let half_depth = DEPTH as f32 / 2.0;
+    let half_width = WIDTH as f32 / 2.0;
+    for x in 0..DEPTH {
+        for y in 0..WIDTH {
             let position = Vec3::new(
-                (x as f32 - array_width as f32 / 2.0) * 0.1,
-                (y as f32 - array_depth as f32 / 2.0) * 0.1,
+                (x as f32 - half_depth) / half_depth,
+                (y as f32 - half_width) / half_width,
                 0.0,
             );
             particles.push(Particle {
@@ -154,7 +156,7 @@ fn setup(
     });
 
     // create meshes for particles
-    let mesh = Sphere::new(0.1);
+    let mesh = Sphere::new(2.0 / (particle_count as f32).sqrt());
     for particle in particles {
         commands.spawn(MaterialMeshBundle {
             mesh: meshes.add(mesh.clone()),
@@ -367,16 +369,21 @@ impl render_graph::Node for ParticleNode {
                     .unwrap();
                 pass.set_bind_group(0, &bind_group, &[]);
                 pass.set_pipeline(init_pipeline);
-                pass.dispatch_workgroups(64, 1, 1);
+                let particle_count = WIDTH * DEPTH;
+                let workgroup_count = (particle_count as f32 / WORKGROUP_SIZE as f32).ceil() as u32;
+                pass.dispatch_workgroups(workgroup_count, 1, 1);
             }
             ParticleState::Update(index) => {
                 let bind_group = &world.resource::<ParticleBindGroups>().0;
                 let update_pipeline = pipeline_cache
                     .get_compute_pipeline(pipeline.update_pipeline)
                     .unwrap();
+                let particle_count = WIDTH * DEPTH;
+                let workgroup_count = (particle_count as f32 / WORKGROUP_SIZE as f32).ceil() as u32;
+
                 pass.set_bind_group(0, &bind_group, &[]);
                 pass.set_pipeline(update_pipeline);
-                pass.dispatch_workgroups(64, 1, 1);
+                pass.dispatch_workgroups(workgroup_count, 1, 1);
             }
         }
 
