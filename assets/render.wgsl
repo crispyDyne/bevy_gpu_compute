@@ -3,7 +3,12 @@
     view_transformations::position_world_to_clip
 }
 
-@group(2) @binding(0) var<storage, read> particles: array<vec4<f32>, 5>;
+struct Particle {
+    position: vec3<f32>,
+    velocity: vec3<f32>,
+}
+
+@group(2) @binding(0) var<storage, read> particles: array<Particle, 1000>;
 
 struct Vertex {
     @builtin(instance_index) instance_index: u32,
@@ -20,12 +25,17 @@ struct VertexOutput {
 fn vertex(vertex: Vertex) -> VertexOutput {
     var out: VertexOutput;
     var world_from_local = mesh_functions::get_world_from_local(vertex.instance_index);
-    out.world_position = mesh_functions::mesh_position_local_to_world(world_from_local, vec4(vertex.position, 1.0));
+    let computed_position = vertex.position + particles[vertex.instance_index].position;
+    out.world_position = mesh_functions::mesh_position_local_to_world(world_from_local, vec4(computed_position, 1.0));
     out.clip_position = position_world_to_clip(out.world_position.xyz);
 
-    // We have 5 colors in the storage buffer, but potentially many instances of the mesh, so
-    // we use the instance index to select a color from the storage buffer.
-    // out.color = colors[vertex.instance_index % 5];
+    // color changes based on z position positive is red, negative is blue
+    let z = computed_position.z;
+    let red = saturate(z/10.0);
+    let blue = saturate(-z/10.0);
+
+
+    out.color = vec4<f32>(red, 0.0, blue, 1.0);
 
     return out;
 }

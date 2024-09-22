@@ -80,6 +80,10 @@ impl Material for ComputeMaterial {
     fn vertex_shader() -> ShaderRef {
         SHADER_ASSET_PATH.into()
     }
+
+    fn fragment_shader() -> ShaderRef {
+        SHADER_ASSET_PATH.into()
+    }
 }
 #[derive(Resource, Clone, ExtractResource)]
 struct StorageBufferID {
@@ -91,9 +95,11 @@ fn setup(
     render_device: Res<RenderDevice>,
     mut buffers: ResMut<Assets<ShaderStorageBuffer>>,
     mut materials: ResMut<Assets<ComputeMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
 ) {
     commands.spawn(Camera3dBundle {
-        transform: Transform::from_translation(Vec3::new(0.0, 0.0, 100.0)),
+        transform: Transform::from_xyz(-50.0, -1.0, 1.0)
+            .looking_at(Vec3::new(0., 0., 0.5), Vec3::Z),
         ..Default::default()
     });
 
@@ -108,18 +114,15 @@ fn setup(
         particle_count as usize
     ];
 
-    // Create the buffer
     let mut storage_buffer = ShaderStorageBuffer::from(particles.clone());
+    storage_buffer.buffer_description.usage = BufferUsages::STORAGE | BufferUsages::COPY_DST;
     storage_buffer.asset_usage = RenderAssetUsages::RENDER_WORLD;
-    storage_buffer.buffer_description.usage =
-        BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::MAP_READ;
 
-    let storage_buffer_handle = buffers.add(ShaderStorageBuffer::from(particles.clone()));
+    let storage_buffer_handle = buffers.add(storage_buffer);
     let compute_material = ComputeMaterial {
         compute: storage_buffer_handle.clone(),
     };
     let material_handle = materials.add(compute_material);
-    commands.insert_resource(ComputeMaterialHandle(material_handle.clone()));
 
     let storage_buffer_id = storage_buffer_handle.id();
     println!("Storage Buffer ID: {:?}", storage_buffer_id);
@@ -136,6 +139,18 @@ fn setup(
     commands.insert_resource(ParticleConfigBuffer {
         buffer: config_buffer,
     });
+
+    // create meshes for particles
+    let mesh = Sphere::new(1.0);
+    for particle in particles {
+        commands.spawn(MaterialMeshBundle {
+            mesh: meshes.add(mesh.clone()),
+            material: material_handle.clone(),
+            transform: Transform::from_translation(particle.position),
+            ..Default::default()
+        });
+    }
+    commands.insert_resource(ComputeMaterialHandle(material_handle.clone()));
 }
 
 struct ParticleComputePlugin;
