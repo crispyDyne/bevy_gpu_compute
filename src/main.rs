@@ -60,6 +60,7 @@ struct ParticleConfigBuffer {
     buffer: Buffer,
 }
 
+#[allow(dead_code)] // should be able to use this instead of the ParticleConfigBuffer
 #[derive(Resource, Clone, ExtractResource)]
 struct ComputeMaterialHandle(Handle<ExtendedMaterial<StandardMaterial, ComputeMaterial>>);
 
@@ -68,6 +69,8 @@ struct ComputeMaterialHandle(Handle<ExtendedMaterial<StandardMaterial, ComputeMa
 struct ComputeMaterial {
     #[storage(100, read_only)]
     compute: Handle<ShaderStorageBuffer>,
+    #[uniform(101)]
+    particle_count: u32,
 }
 
 impl MaterialExtension for ComputeMaterial {
@@ -128,6 +131,7 @@ fn setup(
     let storage_buffer_handle = buffers.add(storage_buffer);
     let compute_material = ComputeMaterial {
         compute: storage_buffer_handle.clone(),
+        particle_count,
     };
 
     let extended_material = ExtendedMaterial {

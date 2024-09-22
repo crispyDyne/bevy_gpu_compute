@@ -36,12 +36,21 @@ struct Particle {
     velocity: vec3<f32>,
 }
 
+struct ParticleConfig {
+    count: u32,
+}
+
 @group(2) @binding(100) var<storage, read> particles: array<Particle>;
+@group(2) @binding(101) var<uniform> particleConfig: ParticleConfig;
 
 
 @vertex
 fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     var out: VertexOutput;
+
+    if vertex_no_morph.instance_index >= particleConfig.count {
+        return out;
+    }
 
 #ifdef MORPH_TARGETS
     var vertex = morph_vertex(vertex_no_morph);
