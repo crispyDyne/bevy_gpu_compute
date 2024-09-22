@@ -17,7 +17,7 @@ use bytemuck::{Pod, Zeroable};
 use std::borrow::Cow;
 
 const SHADER_COMPUTE_PATH: &str = "compute.wgsl";
-const SHADER_ASSET_PATH: &str = "render.wgsl";
+const SHADER_RENDER_PATH: &str = "render.wgsl";
 
 const DEPTH: u32 = 50;
 const WIDTH: u32 = 50;
@@ -35,7 +35,6 @@ fn main() {
                 }),
                 ..default()
             }),
-            // .set(ImagePlugin::default_nearest()),
             MaterialPlugin::<ExtendedMaterial<StandardMaterial, ComputeMaterial>>::default(),
             ParticleComputePlugin,
         ))
@@ -73,7 +72,7 @@ struct ComputeMaterial {
 
 impl MaterialExtension for ComputeMaterial {
     fn vertex_shader() -> ShaderRef {
-        SHADER_ASSET_PATH.into()
+        SHADER_RENDER_PATH.into()
     }
 }
 #[derive(Resource, Clone, ExtractResource)]
@@ -206,8 +205,15 @@ fn prepare_bind_group(
     render_device: Res<RenderDevice>,
     storage_buffer_id: Res<StorageBufferID>,
     render_assets: Res<RenderAssets<GpuShaderStorageBuffer>>,
+    // local variable that tracks if the system has already run
+    mut ran: Local<bool>,
 ) {
-    // println!("Pipeline - prepare_bind_group");
+    if *ran {
+        // seems like there should be a better way to do this
+        return;
+    }
+    println!("Pipeline - prepare_bind_group");
+    *ran = true;
     let storage_buffer = render_assets
         .get(storage_buffer_id.storage_buffer_id.clone())
         .unwrap();
@@ -355,6 +361,9 @@ impl render_graph::Node for ParticleNode {
             .command_encoder()
             .begin_compute_pass(&ComputePassDescriptor::default());
 
+        let particle_count = WIDTH * DEPTH;
+        let workgroup_count = (particle_count as f32 / WORKGROUP_SIZE as f32).ceil() as u32;
+
         // select the pipeline based on the current state
         match self.state {
             ParticleState::Loading => {}
@@ -365,8 +374,6 @@ impl render_graph::Node for ParticleNode {
                     .unwrap();
                 pass.set_bind_group(0, &bind_group, &[]);
                 pass.set_pipeline(init_pipeline);
-                let particle_count = WIDTH * DEPTH;
-                let workgroup_count = (particle_count as f32 / WORKGROUP_SIZE as f32).ceil() as u32;
                 pass.dispatch_workgroups(workgroup_count, 1, 1);
             }
             ParticleState::Update => {
@@ -374,8 +381,6 @@ impl render_graph::Node for ParticleNode {
                 let update_pipeline = pipeline_cache
                     .get_compute_pipeline(pipeline.update_pipeline)
                     .unwrap();
-                let particle_count = WIDTH * DEPTH;
-                let workgroup_count = (particle_count as f32 / WORKGROUP_SIZE as f32).ceil() as u32;
 
                 pass.set_bind_group(0, &bind_group, &[]);
                 pass.set_pipeline(update_pipeline);
