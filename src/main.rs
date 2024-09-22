@@ -296,7 +296,7 @@ impl FromWorld for ParticleComputePipeline {
 enum ParticleState {
     Loading,
     Init,
-    Update(usize),
+    Update,
 }
 
 struct ParticleNode {
@@ -326,23 +326,19 @@ impl render_graph::Node for ParticleNode {
                     CachedPipelineState::Err(err) => {
                         panic!("Initializing assets/{SHADER_COMPUTE_PATH}:\n{err}")
                     }
-                    _ => {}
+                    _ => {
+                        // waiting for the pipeline to load
+                    }
                 }
             }
             ParticleState::Init => {
                 if let CachedPipelineState::Ok(_) =
                     pipeline_cache.get_compute_pipeline_state(pipeline.update_pipeline)
                 {
-                    self.state = ParticleState::Update(1);
+                    self.state = ParticleState::Update;
                 }
             }
-            ParticleState::Update(0) => {
-                self.state = ParticleState::Update(1);
-            }
-            ParticleState::Update(1) => {
-                self.state = ParticleState::Update(0);
-            }
-            ParticleState::Update(_) => unreachable!(),
+            ParticleState::Update => {}
         }
     }
 
@@ -373,7 +369,7 @@ impl render_graph::Node for ParticleNode {
                 let workgroup_count = (particle_count as f32 / WORKGROUP_SIZE as f32).ceil() as u32;
                 pass.dispatch_workgroups(workgroup_count, 1, 1);
             }
-            ParticleState::Update(index) => {
+            ParticleState::Update => {
                 let bind_group = &world.resource::<ParticleBindGroups>().0;
                 let update_pipeline = pipeline_cache
                     .get_compute_pipeline(pipeline.update_pipeline)
