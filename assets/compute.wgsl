@@ -21,6 +21,11 @@ fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
     // Get the particle index
     let index = invocation_id.x;
 
+    if index >= particleConfig.count {
+        // not sure if this is nessary
+        // Without is, is there a risk that some workgroups will access data out of bounds?
+        return;
+    }
 
     // Update the particle's velocity and position
     particles[index].velocity.z -= 0.002; // Gravity effect with speed factor
