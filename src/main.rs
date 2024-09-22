@@ -103,7 +103,7 @@ fn setup(
     commands.spawn((DirectionalLightBundle {
         transform: Transform::from_xyz(-10.0, 5.0, 2.0).looking_at(Vec3::ZERO, Vec3::Z),
         directional_light: DirectionalLight {
-            illuminance: 100000.0,
+            illuminance: 10000.0,
             ..Default::default()
         },
         ..Default::default()
