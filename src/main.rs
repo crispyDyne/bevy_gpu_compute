@@ -19,8 +19,8 @@ use std::borrow::Cow;
 const SHADER_COMPUTE_PATH: &str = "compute.wgsl";
 const SHADER_RENDER_PATH: &str = "render.wgsl";
 
-const DEPTH: u32 = 30;
-const WIDTH: u32 = 30;
+const DEPTH: u32 = 50;
+const WIDTH: u32 = 50;
 const WORKGROUP_SIZE: u32 = 32;
 
 fn main() {
@@ -91,8 +91,8 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(-6.0, -1.0, 1.0)
-            .looking_at(Vec3::new(0.0, 0.0, 1.5), Vec3::Z),
+        transform: Transform::from_xyz(-50.0, -3.0, -20.0)
+            .looking_at(Vec3::new(0.0, 0.0, 20.0), Vec3::Z),
         ..Default::default()
     });
 
@@ -120,7 +120,11 @@ fn setup(
             );
             particles.push(Particle {
                 position,
-                velocity: Vec3::new(0., 0., ((x * y) as f32) / particle_count as f32),
+                velocity: Vec3::new(
+                    0.1 * position.y / (position.length().powi(2) + 0.2),
+                    -0.1 * position.x / (position.length().powi(2) + 0.2),
+                    100.0 * ((position.y + position.x) as f32 % 0.0314159),
+                ),
             });
         }
     }

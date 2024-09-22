@@ -27,12 +27,30 @@ fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
     }
 
     let dt = 0.02; // Time delta
+    var force = vec3<f32>(0.0, 0.0, 0.0); // Force accumulator
+
+    // Bounce off the floor
     if particles[index].position.z < -0.1 {
-        // Reset the particle's position and velocity
         let deflection = -0.1 - particles[index].position.z;
-        particles[index].velocity.z += 10.0 * deflection * dt; // Bounce
+        force.z += 10.0 * deflection * dt; // Bounce
     }
-    // Update the particle's velocity and position
-    particles[index].position.z += particles[index].velocity.z * dt; // Position update
-    particles[index].velocity.z -= 0.1 * dt; // Gravity
+
+    // Gravity between particles
+    for (var i: u32 = 0u; i < particleConfig.count; i++) {
+        if i == index {
+            continue;
+        }
+
+        let delta = particles[i].position - particles[index].position;
+        let distance = length(delta)+0.1;
+        let direction = delta / distance;
+        force += direction * 0.0003 / (distance * distance) ;
+    }
+
+    // Gravity
+    force.z -= 0.02;
+
+    // Integrate the particle's velocity and position
+    particles[index].position += particles[index].velocity * dt; // Integrate Position
+    particles[index].velocity += force * dt; // Integrate Velocity (mass = 1)
 }
