@@ -204,14 +204,8 @@ fn prepare_bind_group(
     render_device: Res<RenderDevice>,
     storage_buffer_id: Res<StorageBufferID>,
     render_assets: Res<RenderAssets<GpuShaderStorageBuffer>>,
-    // material_handle: Res<ComputeMaterialHandle>,
-    // materials: ResMut<Assets<ComputeMaterial>>,
-    // mut buffers: ResMut<Assets<ShaderStorageBuffer>>,
 ) {
-    // let material = materials.get_mut(&material_handle.0).unwrap();
-    // let buffer = buffers.get_mut(&material.compute).unwrap();
-
-    println!("Pipeline - prepare_bind_group");
+    // println!("Pipeline - prepare_bind_group");
     let storage_buffer = render_assets
         .get(storage_buffer_id.storage_buffer_id.clone())
         .unwrap();
@@ -231,7 +225,6 @@ fn prepare_bind_group(
         ],
     );
 
-    println!("Pipeline - prepare_bind_group");
     commands.insert_resource(ParticleBindGroups(particle_bind_group));
 }
 
@@ -326,7 +319,6 @@ impl render_graph::Node for ParticleNode {
             ParticleState::Loading => {
                 match pipeline_cache.get_compute_pipeline_state(pipeline.init_pipeline) {
                     CachedPipelineState::Ok(_) => {
-                        println!("Pipeline - update -  Loading");
                         self.state = ParticleState::Init;
                     }
                     CachedPipelineState::Err(err) => {
@@ -336,7 +328,6 @@ impl render_graph::Node for ParticleNode {
                 }
             }
             ParticleState::Init => {
-                println!("Pipeline - update - Init");
                 if let CachedPipelineState::Ok(_) =
                     pipeline_cache.get_compute_pipeline_state(pipeline.update_pipeline)
                 {
@@ -344,11 +335,9 @@ impl render_graph::Node for ParticleNode {
                 }
             }
             ParticleState::Update(0) => {
-                println!("Pipeline - update - Update 0");
                 self.state = ParticleState::Update(1);
             }
             ParticleState::Update(1) => {
-                println!("Pipeline - update - Update 1");
                 self.state = ParticleState::Update(0);
             }
             ParticleState::Update(_) => unreachable!(),
@@ -370,12 +359,9 @@ impl render_graph::Node for ParticleNode {
 
         // select the pipeline based on the current state
         match self.state {
-            ParticleState::Loading => {
-                println!("Pipeline - run - Loading");
-            }
+            ParticleState::Loading => {}
             ParticleState::Init => {
                 let bind_group = &world.resource::<ParticleBindGroups>().0;
-                println!("Pipeline - run - Init");
                 let init_pipeline = pipeline_cache
                     .get_compute_pipeline(pipeline.init_pipeline)
                     .unwrap();
@@ -385,7 +371,6 @@ impl render_graph::Node for ParticleNode {
             }
             ParticleState::Update(index) => {
                 let bind_group = &world.resource::<ParticleBindGroups>().0;
-                println!("Pipeline - run - Update");
                 let update_pipeline = pipeline_cache
                     .get_compute_pipeline(pipeline.update_pipeline)
                     .unwrap();

@@ -18,10 +18,6 @@ fn init(@builtin(global_invocation_id) invocation_id: vec3<u32>, @builtin(num_wo
 
 @compute @workgroup_size(64, 1, 1)
 fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
-    if invocation_id.x >= particleConfig.count {
-        return;
-    }
-
     // Get the particle index
     let index = invocation_id.x;
 
