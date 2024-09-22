@@ -1,6 +1,7 @@
 //! A compute shader that simulates particle motion
 
 use bevy::{
+    pbr::{ExtendedMaterial, MaterialExtension},
     prelude::*,
     render::{
         extract_resource::{ExtractResource, ExtractResourcePlugin},
@@ -41,7 +42,7 @@ fn main() {
                 ..default()
             }),
             // .set(ImagePlugin::default_nearest()),
-            MaterialPlugin::<ComputeMaterial>::default(),
+            MaterialPlugin::<ExtendedMaterial<StandardMaterial, ComputeMaterial>>::default(),
             ParticleComputePlugin,
         ))
         .add_systems(Startup, setup)
@@ -67,21 +68,17 @@ struct ParticleConfigBuffer {
 }
 
 #[derive(Resource, Clone, ExtractResource)]
-struct ComputeMaterialHandle(Handle<ComputeMaterial>);
+struct ComputeMaterialHandle(Handle<ExtendedMaterial<StandardMaterial, ComputeMaterial>>);
 
 // This struct defines the data that will be passed to your shader
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 struct ComputeMaterial {
-    #[storage(0, read_only)]
+    #[storage(100, read_only)]
     compute: Handle<ShaderStorageBuffer>,
 }
 
-impl Material for ComputeMaterial {
+impl MaterialExtension for ComputeMaterial {
     fn vertex_shader() -> ShaderRef {
-        SHADER_ASSET_PATH.into()
-    }
-
-    fn fragment_shader() -> ShaderRef {
         SHADER_ASSET_PATH.into()
     }
 }
@@ -94,14 +91,23 @@ fn setup(
     mut commands: Commands,
     render_device: Res<RenderDevice>,
     mut buffers: ResMut<Assets<ShaderStorageBuffer>>,
-    mut materials: ResMut<Assets<ComputeMaterial>>,
+    mut materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, ComputeMaterial>>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(-50.0, -1.0, 1.0)
+        transform: Transform::from_xyz(-10.0, -1.0, 1.0)
             .looking_at(Vec3::new(0., 0., 0.5), Vec3::Z),
         ..Default::default()
     });
+
+    commands.spawn((DirectionalLightBundle {
+        transform: Transform::from_xyz(-10.0, 5.0, 2.0).looking_at(Vec3::ZERO, Vec3::Z),
+        directional_light: DirectionalLight {
+            illuminance: 100000.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    },));
 
     let particle_count = 1000;
 
@@ -122,8 +128,15 @@ fn setup(
     let compute_material = ComputeMaterial {
         compute: storage_buffer_handle.clone(),
     };
-    let material_handle = materials.add(compute_material);
 
+    let extended_material = ExtendedMaterial {
+        base: StandardMaterial {
+            base_color: Color::WHITE,
+            ..Default::default()
+        },
+        extension: compute_material,
+    };
+    let material_handle = materials.add(extended_material);
     let storage_buffer_id = storage_buffer_handle.id();
     println!("Storage Buffer ID: {:?}", storage_buffer_id);
     commands.insert_resource(StorageBufferID { storage_buffer_id });
@@ -208,11 +221,11 @@ fn prepare_bind_group(
         &pipeline.particle_bind_group_layout,
         &[
             BindGroupEntry {
-                binding: 0,
+                binding: 100,
                 resource: storage_buffer.buffer.as_entire_binding(),
             },
             BindGroupEntry {
-                binding: 1,
+                binding: 101,
                 resource: config_buffer.buffer.as_entire_binding(),
             },
         ],
@@ -236,7 +249,7 @@ impl FromWorld for ParticleComputePipeline {
             "Particle Bind Group Layout",
             &[
                 BindGroupLayoutEntry {
-                    binding: 0,
+                    binding: 100,
                     visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Storage { read_only: false },
@@ -246,7 +259,7 @@ impl FromWorld for ParticleComputePipeline {
                     count: None,
                 },
                 BindGroupLayoutEntry {
-                    binding: 1,
+                    binding: 101,
                     visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
                         ty: bevy::render::render_resource::BufferBindingType::Uniform,

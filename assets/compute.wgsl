@@ -8,8 +8,8 @@ struct ParticleConfig {
     count: u32,
 }
 
-@group(0) @binding(0) var<storage, read_write> particles: array<Particle>;
-@group(0) @binding(1) var<uniform> particleConfig: ParticleConfig;
+@group(0) @binding(100) var<storage, read_write> particles: array<Particle>;
+@group(0) @binding(101) var<uniform> particleConfig: ParticleConfig;
 
 @compute @workgroup_size(64, 1, 1)
 fn init(@builtin(global_invocation_id) invocation_id: vec3<u32>, @builtin(num_workgroups) num_workgroups: vec3<u32>) {
@@ -18,7 +18,7 @@ fn init(@builtin(global_invocation_id) invocation_id: vec3<u32>, @builtin(num_wo
 
 @compute @workgroup_size(64, 1, 1)
 fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
-    if (invocation_id.x >= particleConfig.count) {
+    if invocation_id.x >= particleConfig.count {
         return;
     }
 
